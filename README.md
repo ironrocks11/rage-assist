@@ -94,3 +94,7 @@ rage-assist/
 ## Copyright
 
 © 2026 Piyush Yati. All rights reserved.
+
+This project and its source code are provided for viewing and portfolio purposes only.
+No permission is granted to copy, modify, distribute, or reuse the source code without
+prior written permission from the author.
