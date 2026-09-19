@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Rage Assist</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+      font-family: 'Georgia', serif;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(139, 69, 19, 0.15), transparent 40%),
+        radial-gradient(circle at 80% 70%, rgba(193, 68, 14, 0.12), transparent 45%),
+        radial-gradient(circle at 50% 100%, rgba(139, 0, 0, 0.1), transparent 50%),
+        linear-gradient(180deg, #0a0806 0%, #17120d 50%, #0a0806 100%);
+    }
+    #game-container {
+      width: 100%;
+      max-width: 600px;
+      box-shadow: 0 0 60px rgba(0,0,0,0.8);
+    }
+
+    #auth-modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(10,8,6,0.9);
+      z-index: 100;
+      justify-content: center;
+      align-items: center;
+    }
+    #auth-box {
+      background: linear-gradient(145deg, #2b2118, #1a140e);
+      padding: 30px;
+      border-radius: 8px;
+      border: 2px solid #c1440e;
+      width: 90%;
+      max-width: 320px;
+      text-align: center;
+      box-shadow: 0 0 30px rgba(193, 68, 14, 0.3);
+    }
+    #auth-box h2 {
+      color: #ff8c42;
+      margin-bottom: 16px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    #auth-box input {
+      width: 100%;
+      padding: 12px;
+      margin: 8px 0;
+      border-radius: 4px;
+      border: 1px solid #4a3728;
+      background: #0d0a08;
+      color: #f0e6d8;
+      font-size: 16px;
+    }
+    #auth-box button {
+      width: 100%;
+      padding: 12px;
+      margin: 8px 0;
+      border-radius: 4px;
+      border: none;
+      font-size: 15px;
+      cursor: pointer;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    #auth-submit-btn { background: #c1440e; color: #fff; }
+    #auth-toggle-btn { background: #4a3728; color: #f0e6d8; }
+    #auth-close-btn { background: #2b2118; color: #999; }
+    #auth-message {
+      color: #ff8c42;
+      font-size: 13px;
+      min-height: 18px;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container"></div>
+
+  <div id="auth-modal">
+    <div id="auth-box">
+      <h2 id="auth-title">Create Guest Account</h2>
+
+            <input id="auth-name" type="text" placeholder="Name" />
+      <input id="auth-password" type="password" placeholder="Password" />
+
+      <button id="auth-submit-btn">Sign Up</button>
+      <button id="auth-toggle-btn">Already have an account? Login</button>
+      <button id="auth-close-btn">Close</button>
+
+      <div id="auth-message"></div>
+    </div>
+  </div>
+
+  <script type="module" src="/main.js"></script>
+</body>
+</html>
