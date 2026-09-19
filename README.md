@@ -90,3 +90,7 @@ rage-assist/
 ## 👨‍💻 Project
 
 **Rage Assist** is a learning and portfolio project focused on exploring game development, web technologies, Firebase, and AI-assisted software development.
+
+## Copyright
+
+© 2026 Piyush Yati. All rights reserved.
