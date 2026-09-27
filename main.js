@@ -11,13 +11,8 @@ const CANDIES = [
 ];
 
 const THEME = {
-  bg: '#0a0806',
-  panel: '#1a140e',
-  accent: '#c1440e',
-  accentBright: '#ff8c42',
-  text: '#f0e6d8',
-  textDim: '#8a7a68',
-  danger: '#8b0000'
+  bg: '#0a0806', panel: '#1a140e', accent: '#c1440e',
+  accentBright: '#ff8c42', text: '#f0e6d8', textDim: '#8a7a68', danger: '#8b0000'
 };
 
 const BOARD_SIZE = 560;
@@ -34,7 +29,17 @@ const LEVELS = [
   { id: 7, gridSize: 7, moves: 22, star1: 500, star2: 1000, star3: 1500 },
   { id: 8, gridSize: 7, moves: 22, star1: 550, star2: 1100, star3: 1650 },
   { id: 9, gridSize: 8, moves: 25, star1: 600, star2: 1200, star3: 1800 },
-  { id: 10, gridSize: 8, moves: 25, star1: 700, star2: 1400, star3: 2100 }
+  { id: 10, gridSize: 8, moves: 25, star1: 700, star2: 1400, star3: 2100 },
+  { id: 11, gridSize: 8, moves: 26, star1: 750, star2: 1500, star3: 2250 },
+  { id: 12, gridSize: 8, moves: 27, star1: 800, star2: 1600, star3: 2400 },
+  { id: 13, gridSize: 8, moves: 28, star1: 850, star2: 1700, star3: 2550 },
+  { id: 14, gridSize: 9, moves: 28, star1: 900, star2: 1800, star3: 2700 },
+  { id: 15, gridSize: 9, moves: 30, star1: 950, star2: 1900, star3: 2850 },
+  { id: 16, gridSize: 9, moves: 30, star1: 1000, star2: 2000, star3: 3000 },
+  { id: 17, gridSize: 9, moves: 32, star1: 1100, star2: 2200, star3: 3300 },
+  { id: 18, gridSize: 9, moves: 32, star1: 1150, star2: 2300, star3: 3450 },
+  { id: 19, gridSize: 9, moves: 34, star1: 1200, star2: 2400, star3: 3600 },
+  { id: 20, gridSize: 9, moves: 35, star1: 1300, star2: 2600, star3: 3900 }
 ];
 
 function getStars(level, score) {
@@ -94,11 +99,7 @@ function setupAuthModal(onAuthChange) {
   submitBtn.onclick = async () => {
     const name = nameInput.value.trim();
     const password = passInput.value;
-
-    if (!name || password.length < 6) {
-      message.textContent = 'Name required, password min 6 chars';
-      return;
-    }
+    if (!name || password.length < 6) { message.textContent = 'Name required, password min 6 chars'; return; }
 
     const email = nameToEmail(name);
     message.textContent = 'Please wait...';
@@ -113,7 +114,6 @@ function setupAuthModal(onAuthChange) {
         userCred = await signInWithEmailAndPassword(auth, email, password);
         currentUser = { name: userCred.user.displayName || name };
       }
-
       localStorage.setItem('rageAssistUser', JSON.stringify(currentUser));
       modal.style.display = 'none';
       onAuthChange();
@@ -126,47 +126,114 @@ function setupAuthModal(onAuthChange) {
   };
 }
 
-// Ambient smoke + embers ek scene ke background mein — koi bhi scene ye call kar sakta hai
+class SoundManager {
+  constructor() {
+    this.ctx = null;
+    this.musicOsc = null;
+    this.musicPlaying = false;
+    this.enabled = localStorage.getItem('rageAssistSound') !== 'off';
+  }
+  ensureCtx() { if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+  beep(freq, duration, type = 'sine', vol = 0.12) {
+    if (!this.enabled) return;
+    this.ensureCtx();
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.value = vol;
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+    osc.stop(this.ctx.currentTime + duration);
+  }
+  swap() { this.beep(300, 0.08, 'triangle', 0.1); }
+  match() { this.beep(650, 0.1, 'square', 0.1); }
+  explosion() { this.beep(80, 0.3, 'sawtooth', 0.18); }
+  click() { this.beep(440, 0.05, 'sine', 0.08); }
+  levelComplete() {
+    if (!this.enabled) return;
+    [523, 659, 784].forEach((f, i) => setTimeout(() => this.beep(f, 0.2, 'sine', 0.13), i * 150));
+  }
+  startMusic() {
+    if (!this.enabled || this.musicPlaying) return;
+    this.ensureCtx();
+    this.musicPlaying = true;
+    this.musicOsc = this.ctx.createOscillator();
+    this.musicGain = this.ctx.createGain();
+    this.musicOsc.type = 'sine';
+    this.musicOsc.frequency.value = 55;
+    this.musicGain.gain.value = 0.025;
+    this.musicOsc.connect(this.musicGain);
+    this.musicGain.connect(this.ctx.destination);
+    this.musicOsc.start();
+  }
+  stopMusic() {
+    if (this.musicOsc) { try { this.musicOsc.stop(); } catch (e) {} this.musicOsc = null; this.musicPlaying = false; }
+  }
+  toggle() {
+    this.enabled = !this.enabled;
+    localStorage.setItem('rageAssistSound', this.enabled ? 'on' : 'off');
+    if (!this.enabled) this.stopMusic();
+    return this.enabled;
+  }
+}
+const sfx = new SoundManager();
+
+async function submitScoreToLeaderboard(totalScore) {
+  if (!auth.currentUser) return;
+  try {
+    await setDoc(doc(db, 'leaderboard', auth.currentUser.uid), {
+      name: auth.currentUser.displayName || 'Player',
+      score: totalScore,
+      updatedAt: Date.now()
+    });
+  } catch (e) { console.log('Leaderboard save failed:', e); }
+}
+
+function getTotalScore() {
+  const progress = loadProgress();
+  let total = 0;
+  Object.keys(progress).forEach((id) => { total += progress[id] * 100; });
+  return total;
+}
+
+async function fetchLeaderboard() {
+  try {
+    const q = query(collection(db, 'leaderboard'), orderBy('score', 'desc'), limit(10));
+    const snap = await getDocs(q);
+    const results = [];
+    snap.forEach((d) => results.push(d.data()));
+    return results;
+  } catch (e) {
+    console.log('Leaderboard fetch failed:', e);
+    return [];
+  }
+}
+
 function addBattlefieldAmbience(scene) {
   const { width, height } = scene.scale;
-
-  // Smoke puffs — dhundhla grey circles jo slowly upar drift karte hain
   for (let i = 0; i < 5; i++) {
     const x = Phaser.Math.Between(0, width);
     const y = Phaser.Math.Between(height * 0.5, height);
     const smoke = scene.add.circle(x, y, Phaser.Math.Between(60, 110), 0x3a3028, 0.06);
     scene.tweens.add({
-      targets: smoke,
-      y: y - Phaser.Math.Between(150, 300),
-      x: x + Phaser.Math.Between(-40, 40),
-      alpha: 0,
-      duration: Phaser.Math.Between(6000, 10000),
-      repeat: -1,
-      delay: Phaser.Math.Between(0, 3000)
+      targets: smoke, y: y - Phaser.Math.Between(150, 300), x: x + Phaser.Math.Between(-40, 40),
+      alpha: 0, duration: Phaser.Math.Between(6000, 10000), repeat: -1, delay: Phaser.Math.Between(0, 3000)
     });
   }
-
-  // Embers — chhote orange particles jo upar udte hain
   for (let i = 0; i < 10; i++) {
     const x = Phaser.Math.Between(0, width);
     const ember = scene.add.circle(x, height + 10, Phaser.Math.Between(2, 4), 0xff8c42, 0.7);
     const rise = () => {
-      ember.y = height + 10;
-      ember.x = Phaser.Math.Between(0, width);
-      ember.alpha = 0.7;
-      scene.tweens.add({
-        targets: ember,
-        y: -20,
-        alpha: 0,
-        duration: Phaser.Math.Between(3000, 6000),
-        onComplete: rise
-      });
+      ember.y = height + 10; ember.x = Phaser.Math.Between(0, width); ember.alpha = 0.7;
+      scene.tweens.add({ targets: ember, y: -20, alpha: 0, duration: Phaser.Math.Between(3000, 6000), onComplete: rise });
     };
     scene.time.delayedCall(Phaser.Math.Between(0, 4000), rise);
   }
 }
 
-// Rugged battlefield-style button banata hai (border ke saath)
 function makeButton(scene, x, y, text, bgColor, textColor, fontSize) {
   const padX = 24, padY = 10;
   const label = scene.add.text(0, 0, text, {
@@ -185,41 +252,74 @@ function makeButton(scene, x, y, text, bgColor, textColor, fontSize) {
   const container = scene.add.container(x, y, [bg, label]);
   const hitZone = scene.add.zone(0, 0, w, h).setInteractive({ useHandCursor: true });
   container.add(hitZone);
-
   container.hitZone = hitZone;
+
+  hitZone.on('pointerdown', () => sfx.click());
   return container;
 }
 
-// Match size ke hisab se popup message
 function matchMessage(count) {
   if (count >= 5) return { text: 'OVERPOWERED!', color: '#ff2222', size: 34 };
   if (count === 4) return { text: 'DAMN!', color: '#ff8c42', size: 28 };
   return { text: 'GOOD!', color: '#ffd93d', size: 22 };
 }
 
-// ===================== MENU SCENE =====================
 class MenuScene extends Phaser.Scene {
   constructor() { super('MenuScene'); }
+  create() {
+    const { width, height } = this.scale;
+    addBattlefieldAmbience(this);
+    sfx.startMusic();
+
+    this.add.text(width / 2, height / 2 - 150, 'RAGE ASSIST', {
+      fontSize: '44px', color: THEME.accentBright, fontStyle: 'bold', fontFamily: 'Georgia'
+    }).setOrigin(0.5);
+
+    this.add.text(width / 2, height / 2 - 100, '🔫💣🗡️⭐💎', { fontSize: '28px' }).setOrigin(0.5);
+
+    const startBtn = makeButton(this, width / 2, height / 2 - 10, '▶ START', 0xc1440e, '#fff', '28px');
+    const leaderBtn = makeButton(this, width / 2, height / 2 + 55, '🏆 LEADERBOARD', 0x3d3226, THEME.accentBright, '20px');
+    const settingsBtn = makeButton(this, width / 2, height / 2 + 115, '⚙ SETTINGS', 0x3d3226, THEME.text, '20px');
+
+    startBtn.hitZone.on('pointerdown', () => this.scene.start('LevelSelectScene'));
+    leaderBtn.hitZone.on('pointerdown', () => this.scene.start('LeaderboardScene'));
+    settingsBtn.hitZone.on('pointerdown', () => this.scene.start('SettingsScene'));
+  }
+}
+
+class LeaderboardScene extends Phaser.Scene {
+  constructor() { super('LeaderboardScene'); }
 
   create() {
     const { width, height } = this.scale;
     addBattlefieldAmbience(this);
 
-    this.add.text(width / 2, height / 2 - 130, 'RAGE ASSIST', {
-      fontSize: '46px', color: THEME.accentBright, fontStyle: 'bold', fontFamily: 'Georgia'
+    this.add.text(width / 2, 40, '🏆 LEADERBOARD', {
+      fontSize: '28px', color: THEME.accentBright, fontStyle: 'bold', fontFamily: 'Georgia'
     }).setOrigin(0.5);
 
-    this.add.text(width / 2, height / 2 - 80, '🔫💣🗡️⭐💎', { fontSize: '30px' }).setOrigin(0.5);
+    const loadingText = this.add.text(width / 2, height / 2, 'Loading...', { fontSize: '18px', color: THEME.textDim }).setOrigin(0.5);
 
-    const startBtn = makeButton(this, width / 2, height / 2 + 30, '▶ START', 0xc1440e, '#fff', '30px');
-    const settingsBtn = makeButton(this, width / 2, height / 2 + 100, '⚙ SETTINGS', 0x3d3226, THEME.text, '22px');
+    fetchLeaderboard().then((results) => {
+      loadingText.destroy();
+      if (results.length === 0) {
+        this.add.text(width / 2, height / 2, 'No scores yet. Be the first!', { fontSize: '16px', color: THEME.textDim }).setOrigin(0.5);
+        return;
+      }
+      results.forEach((entry, i) => {
+        const y = 100 + i * 42;
+        const rankColor = i === 0 ? '#ffd93d' : i === 1 ? '#cccccc' : i === 2 ? '#cd7f32' : THEME.text;
+        this.add.text(50, y, '#' + (i + 1), { fontSize: '18px', color: rankColor, fontStyle: 'bold' });
+        this.add.text(100, y, entry.name || 'Player', { fontSize: '18px', color: THEME.text });
+        this.add.text(width - 50, y, String(entry.score), { fontSize: '18px', color: THEME.accentBright }).setOrigin(1, 0);
+      });
+    });
 
-    startBtn.hitZone.on('pointerdown', () => this.scene.start('LevelSelectScene'));
-    settingsBtn.hitZone.on('pointerdown', () => this.scene.start('SettingsScene'));
+    const backBtn = makeButton(this, width / 2, height - 50, '⬅ MENU', 0x2b2118, THEME.textDim, '18px');
+    backBtn.hitZone.on('pointerdown', () => this.scene.start('MenuScene'));
   }
 }
 
-// ===================== SETTINGS SCENE =====================
 class SettingsScene extends Phaser.Scene {
   constructor() { super('SettingsScene'); }
 
@@ -227,37 +327,39 @@ class SettingsScene extends Phaser.Scene {
     const { width, height } = this.scale;
     addBattlefieldAmbience(this);
 
-    this.add.text(width / 2, height / 2 - 120, 'SETTINGS', {
-      fontSize: '34px', color: THEME.accentBright, fontStyle: 'bold', fontFamily: 'Georgia'
+    this.add.text(width / 2, height / 2 - 150, 'SETTINGS', {
+      fontSize: '32px', color: THEME.accentBright, fontStyle: 'bold', fontFamily: 'Georgia'
     }).setOrigin(0.5);
 
     const saved = localStorage.getItem('rageAssistUser');
     const user = saved ? JSON.parse(saved) : null;
 
     if (user) {
-      this.add.text(width / 2, height / 2 - 50, 'Logged in as: ' + user.name, {
-        fontSize: '17px', color: '#8fc97a'
-      }).setOrigin(0.5);
-
-      const logoutBtn = makeButton(this, width / 2, height / 2 + 10, 'LOGOUT', 0x6b1f1f, '#fff', '18px');
+      this.add.text(width / 2, height / 2 - 80, 'Logged in as: ' + user.name, { fontSize: '16px', color: '#8fc97a' }).setOrigin(0.5);
+      const logoutBtn = makeButton(this, width / 2, height / 2 - 20, 'LOGOUT', 0x6b1f1f, '#fff', '17px');
       logoutBtn.hitZone.on('pointerdown', () => {
         localStorage.removeItem('rageAssistUser');
         currentUser = null;
         this.scene.restart();
       });
     } else {
-      this.add.text(width / 2, height / 2 - 50, 'Not logged in', { fontSize: '15px', color: THEME.textDim }).setOrigin(0.5);
-
-      const accountBtn = makeButton(this, width / 2, height / 2 + 20, '👤 SIGN UP / LOGIN', 0x3d3226, THEME.text, '18px');
+      this.add.text(width / 2, height / 2 - 80, 'Not logged in', { fontSize: '14px', color: THEME.textDim }).setOrigin(0.5);
+      const accountBtn = makeButton(this, width / 2, height / 2 - 20, '👤 SIGN UP / LOGIN', 0x3d3226, THEME.text, '17px');
       accountBtn.hitZone.on('pointerdown', () => window.openAuthModal());
     }
 
-    const backBtn = makeButton(this, width / 2, height / 2 + 100, '⬅ BACK', 0x2b2118, THEME.textDim, '18px');
+    const soundBtn = makeButton(this, width / 2, height / 2 + 50, sfx.enabled ? '🔊 SOUND: ON' : '🔇 SOUND: OFF', 0x3d3226, THEME.text, '17px');
+    soundBtn.hitZone.on('pointerdown', () => {
+      const on = sfx.toggle();
+      if (on) sfx.startMusic();
+      this.scene.restart();
+    });
+
+    const backBtn = makeButton(this, width / 2, height / 2 + 120, '⬅ BACK', 0x2b2118, THEME.textDim, '17px');
     backBtn.hitZone.on('pointerdown', () => this.scene.start('MenuScene'));
   }
 }
 
-// ===================== LEVEL SELECT SCENE =====================
 class LevelSelectScene extends Phaser.Scene {
   constructor() { super('LevelSelectScene'); }
 
@@ -266,44 +368,45 @@ class LevelSelectScene extends Phaser.Scene {
     addBattlefieldAmbience(this);
     const progress = loadProgress();
 
-    this.add.text(width / 2, 40, 'SELECT LEVEL', {
-      fontSize: '28px', color: THEME.accentBright, fontStyle: 'bold', fontFamily: 'Georgia'
+    this.add.text(width / 2, 30, 'SELECT LEVEL', {
+      fontSize: '24px', color: THEME.accentBright, fontStyle: 'bold', fontFamily: 'Georgia'
     }).setOrigin(0.5);
 
     const cols = 5;
-    const spacing = 100;
+    const spacing = 95;
+    const rowSpacing = 105;
     const startX = width / 2 - ((cols - 1) * spacing) / 2;
-    const startY = 130;
+    const startY = 95;
 
     LEVELS.forEach((level, i) => {
       const col = i % cols;
       const row = Math.floor(i / cols);
       const x = startX + col * spacing;
-      const y = startY + row * 130;
+      const y = startY + row * rowSpacing;
 
       const stars = progress[level.id] || 0;
 
       const bg = this.add.graphics();
       bg.fillStyle(0x3d3226, 1);
-      bg.fillCircle(x, y, 34);
+      bg.fillCircle(x, y, 30);
       bg.lineStyle(2, 0xc1440e, 0.8);
-      bg.strokeCircle(x, y, 34);
+      bg.strokeCircle(x, y, 30);
 
-      const hitZone = this.add.zone(x, y, 68, 68).setInteractive({ useHandCursor: true });
-      this.add.text(x, y, String(level.id), { fontSize: '22px', color: THEME.text, fontStyle: 'bold' }).setOrigin(0.5);
+      const hitZone = this.add.zone(x, y, 60, 60).setInteractive({ useHandCursor: true });
+      this.add.text(x, y, String(level.id), { fontSize: '18px', color: THEME.text, fontStyle: 'bold' }).setOrigin(0.5);
 
       const starDisplay = '⭐'.repeat(stars) + '☆'.repeat(3 - stars);
-      this.add.text(x, y + 42, starDisplay, { fontSize: '14px' }).setOrigin(0.5);
+      this.add.text(x, y + 36, starDisplay, { fontSize: '11px' }).setOrigin(0.5);
 
-      hitZone.on('pointerdown', () => this.scene.start('GameScene', { level }));
+      hitZone.on('pointerdown', () => { sfx.click(); this.scene.start('GameScene', { level }); });
     });
 
-    const backBtn = makeButton(this, width / 2, startY + Math.ceil(LEVELS.length / cols) * 130 + 20, '⬅ MENU', 0x2b2118, THEME.textDim, '18px');
+    const rows = Math.ceil(LEVELS.length / cols);
+    const backBtn = makeButton(this, width / 2, startY + rows * rowSpacing + 20, '⬅ MENU', 0x2b2118, THEME.textDim, '16px');
     backBtn.hitZone.on('pointerdown', () => this.scene.start('MenuScene'));
   }
 }
 
-// ===================== GAME SCENE =====================
 class GameScene extends Phaser.Scene {
   constructor() { super('GameScene'); }
 
@@ -316,6 +419,7 @@ class GameScene extends Phaser.Scene {
     this.selectedTile = null;
     this.inputLocked = false;
     this.grid = [];
+    this.chainCount = 0;
   }
 
   getX(col) { return col * (this.tileSize + TILE_GAP) + this.tileSize / 2 + TILE_GAP; }
@@ -324,18 +428,14 @@ class GameScene extends Phaser.Scene {
   drawTile(row, col, candyIndex) {
     const x = this.getX(col);
     const y = this.getY(row);
-
     const container = this.add.container(x, y);
     const bg = this.add.graphics();
     const icon = this.add.text(0, 0, '', { fontSize: Math.floor(this.tileSize * 0.5) + 'px' }).setOrigin(0.5);
-
     container.add([bg, icon]);
     const hitZone = this.add.zone(0, 0, this.tileSize, this.tileSize).setInteractive();
     container.add(hitZone);
-
     const tileData = { candyIndex, container, bg, icon, hitZone, row, col };
     hitZone.on('pointerdown', () => this.onTileClick(tileData));
-
     this.paintTile(tileData);
     return tileData;
   }
@@ -352,7 +452,6 @@ class GameScene extends Phaser.Scene {
   }
 
   highlightTile(tileData, on) { tileData.container.setScale(on ? 1.1 : 1); }
-
   swapData(a, b) { const t = a.candyIndex; a.candyIndex = b.candyIndex; b.candyIndex = t; this.paintTile(a); this.paintTile(b); }
   swapDataOnly(a, b) { const t = a.candyIndex; a.candyIndex = b.candyIndex; b.candyIndex = t; }
 
@@ -366,6 +465,7 @@ class GameScene extends Phaser.Scene {
       }
       case 1: {
         s.cameras.main.shake(150, 0.006);
+        sfx.explosion();
         const boom = s.add.text(x, y, '💥', { fontSize: '44px' }).setOrigin(0.5).setScale(0.4);
         s.tweens.add({ targets: boom, scale: 1.4, alpha: 0, duration: 300, onComplete: () => boom.destroy() });
         break;
@@ -403,20 +503,23 @@ class GameScene extends Phaser.Scene {
     }).setOrigin(0.5).setScale(0.3).setAngle(-6);
 
     this.tweens.add({
-      targets: popup,
-      scale: 1,
-      angle: 0,
-      duration: 180,
-      ease: 'Back.easeOut',
+      targets: popup, scale: 1, angle: 0, duration: 180, ease: 'Back.easeOut',
       onComplete: () => {
-        this.tweens.add({
-          targets: popup,
-          y: y - 30,
-          alpha: 0,
-          duration: 500,
-          delay: 300,
-          onComplete: () => popup.destroy()
-        });
+        this.tweens.add({ targets: popup, y: y - 30, alpha: 0, duration: 500, delay: 300, onComplete: () => popup.destroy() });
+      }
+    });
+  }
+
+  showComboPopup() {
+    const { width } = this.scale;
+    const combo = this.add.text(width / 2, 100, 'COMBO x' + this.chainCount + '!', {
+      fontSize: '26px', color: '#ff2222', fontStyle: 'bold', fontFamily: 'Georgia', stroke: '#000', strokeThickness: 4
+    }).setOrigin(0.5).setScale(0.5);
+
+    this.tweens.add({
+      targets: combo, scale: 1.2, duration: 150, ease: 'Back.easeOut',
+      onComplete: () => {
+        this.tweens.add({ targets: combo, alpha: 0, y: 80, duration: 400, delay: 250, onComplete: () => combo.destroy() });
       }
     });
   }
@@ -424,7 +527,6 @@ class GameScene extends Phaser.Scene {
   findMatches() {
     const matched = new Set();
     const gs = this.gridSize;
-
     for (let row = 0; row < gs; row++) {
       let count = 1;
       for (let col = 1; col <= gs; col++) {
@@ -473,11 +575,9 @@ class GameScene extends Phaser.Scene {
   triggerStormReshuffle() {
     this.inputLocked = true;
     const { width, height } = this.scale;
-
     const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.6);
-    const msg = this.add.text(width / 2, height / 2 - 20, '⛈ NO MOVES LEFT ⛈', { fontSize: '26px', color: THEME.accentBright, fontStyle: 'bold' }).setOrigin(0.5);
-    const subMsg = this.add.text(width / 2, height / 2 + 20, 'Reshuffling...', { fontSize: '16px', color: THEME.text }).setOrigin(0.5);
-
+    const msg = this.add.text(width / 2, height / 2 - 20, '⛈ NO MOVES LEFT ⛈', { fontSize: '24px', color: THEME.accentBright, fontStyle: 'bold' }).setOrigin(0.5);
+    const subMsg = this.add.text(width / 2, height / 2 + 20, 'Reshuffling...', { fontSize: '15px', color: THEME.text }).setOrigin(0.5);
     this.tweens.add({ targets: msg, scale: 1.15, yoyo: true, repeat: 3, duration: 250 });
 
     const drops = [];
@@ -505,7 +605,6 @@ class GameScene extends Phaser.Scene {
     const gs = this.gridSize;
     let allValues = [];
     for (let row = 0; row < gs; row++) for (let col = 0; col < gs; col++) allValues.push(this.grid[row][col].candyIndex);
-
     let attempts = 0, valid = false;
     while (!valid && attempts < 50) {
       for (let i = allValues.length - 1; i > 0; i--) {
@@ -517,7 +616,6 @@ class GameScene extends Phaser.Scene {
       valid = this.findMatches().size === 0 && this.hasPossibleMoves();
       attempts++;
     }
-
     for (let row = 0; row < gs; row++) {
       for (let col = 0; col < gs; col++) {
         const tile = this.grid[row][col];
@@ -539,13 +637,19 @@ class GameScene extends Phaser.Scene {
     }
 
     this.inputLocked = true;
-    this.score += matched.size * 10;
+    this.chainCount++;
+
+    const multiplier = 1 + (this.chainCount - 1) * 0.5;
+    const points = Math.round(matched.size * 10 * multiplier);
+    this.score += points;
     this.scoreText.setText('Score: ' + this.score);
 
-    // Popup message ek baar, matched group ke center pe
+    if (this.chainCount >= 2) this.showComboPopup();
+
     let sumX = 0, sumY = 0;
     matched.forEach((tile) => { sumX += tile.container.x; sumY += tile.container.y; });
     this.showMatchPopup(matched.size, sumX / matched.size, sumY / matched.size);
+    sfx.match();
 
     matched.forEach((tile) => {
       this.spawnEffect(tile.candyIndex, tile.container.x, tile.container.y);
@@ -601,11 +705,13 @@ class GameScene extends Phaser.Scene {
       const prev = this.selectedTile;
       this.highlightTile(prev, false);
       this.selectedTile = null;
+      sfx.swap();
       this.swapData(prev, tileData);
       const matched = this.findMatches();
       if (matched.size > 0) {
         this.movesLeft--;
         this.movesText.setText('Moves: ' + this.movesLeft);
+        this.chainCount = 0;
         this.processMatches();
       } else {
         this.swapData(prev, tileData);
@@ -621,17 +727,20 @@ class GameScene extends Phaser.Scene {
     this.inputLocked = true;
     const stars = getStars(this.level, this.score);
     saveProgress(this.level.id, stars);
+    sfx.levelComplete();
+
+    submitScoreToLeaderboard(getTotalScore());
 
     const { width, height } = this.scale;
     this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.8);
-    this.add.text(width / 2, height / 2 - 100, 'LEVEL COMPLETE', { fontSize: '28px', color: THEME.accentBright, fontStyle: 'bold' }).setOrigin(0.5);
+    this.add.text(width / 2, height / 2 - 100, 'LEVEL COMPLETE', { fontSize: '26px', color: THEME.accentBright, fontStyle: 'bold' }).setOrigin(0.5);
 
     const starDisplay = '⭐'.repeat(stars) + '☆'.repeat(3 - stars);
-    this.add.text(width / 2, height / 2 - 50, starDisplay, { fontSize: '40px' }).setOrigin(0.5);
-    this.add.text(width / 2, height / 2, 'Score: ' + this.score, { fontSize: '22px', color: THEME.text }).setOrigin(0.5);
+    this.add.text(width / 2, height / 2 - 50, starDisplay, { fontSize: '38px' }).setOrigin(0.5);
+    this.add.text(width / 2, height / 2, 'Score: ' + this.score, { fontSize: '20px', color: THEME.text }).setOrigin(0.5);
 
-    const retryBtn = makeButton(this, width / 2, height / 2 + 70, '🔁 RETRY', 0xc1440e, '#fff', '20px');
-    const menuBtn = makeButton(this, width / 2, height / 2 + 130, '☰ LEVELS', 0x3d3226, THEME.text, '20px');
+    const retryBtn = makeButton(this, width / 2, height / 2 + 70, '🔁 RETRY', 0xc1440e, '#fff', '19px');
+    const menuBtn = makeButton(this, width / 2, height / 2 + 130, '☰ LEVELS', 0x3d3226, THEME.text, '19px');
 
     retryBtn.hitZone.on('pointerdown', () => this.scene.restart({ level: this.level }));
     menuBtn.hitZone.on('pointerdown', () => this.scene.start('LevelSelectScene'));
@@ -640,9 +749,9 @@ class GameScene extends Phaser.Scene {
   create() {
     addBattlefieldAmbience(this);
 
-    this.scoreText = this.add.text(10, 15, 'Score: 0', { fontSize: '20px', color: THEME.text, fontFamily: 'Georgia' });
-    this.movesText = this.add.text(10, 42, 'Moves: ' + this.movesLeft, { fontSize: '17px', color: THEME.accentBright, fontFamily: 'Georgia' });
-    this.add.text(BOARD_SIZE - 10, 15, 'Level ' + this.level.id, { fontSize: '16px', color: THEME.textDim }).setOrigin(1, 0);
+    this.scoreText = this.add.text(10, 15, 'Score: 0', { fontSize: '19px', color: THEME.text, fontFamily: 'Georgia' });
+    this.movesText = this.add.text(10, 42, 'Moves: ' + this.movesLeft, { fontSize: '16px', color: THEME.accentBright, fontFamily: 'Georgia' });
+    this.add.text(BOARD_SIZE - 10, 15, 'Level ' + this.level.id, { fontSize: '15px', color: THEME.textDim }).setOrigin(1, 0);
 
     this.grid = [];
     const gs = this.gridSize;
@@ -672,7 +781,7 @@ const config = {
   parent: 'game-container',
   backgroundColor: THEME.bg,
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [MenuScene, SettingsScene, LevelSelectScene, GameScene]
+  scene: [MenuScene, SettingsScene, LevelSelectScene, LeaderboardScene, GameScene]
 };
 
 const game = new Phaser.Game(config);
