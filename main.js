@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { auth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from './firebase-config.js';
+import { auth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, db, doc, setDoc, getDocs, collection, query, orderBy, limit } from './firebase-config.js';
 
 const CANDIES = [
   { emoji: '🔫', color: 0x8b3a1a },
